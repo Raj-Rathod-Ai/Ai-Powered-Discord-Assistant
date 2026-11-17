@@ -343,23 +343,35 @@ def color_converter(value: str) -> str:
 
 
 @tool
-def github_repository_search(query: str) -> str:
-    """Search public GitHub repositories without an access token."""
+def github_repository_search(query: str, max_results: int = 10) -> str:
+    """Search public GitHub repositories. Returns up to 10 results with stars, language, license, update time and URL."""
     try:
+        limit = max(1, min(int(max_results), 10))
         response = requests.get(
             "https://api.github.com/search/repositories",
-            params={"q": query, "per_page": 5},
+            params={"q": query, "per_page": limit, "sort": "stars", "order": "desc"},
             headers={"Accept": "application/vnd.github+json"},
-            timeout=12,
+            timeout=15,
         )
         response.raise_for_status()
         items = response.json().get("items", [])
-        return "\n".join(
-            f"{item['full_name']} — {item.get('description') or 'No description'}\n{item['html_url']}"
-            for item in items
-        ) or "No repositories found."
-    except Exception as exc:
-        return f"GitHub search failed: {exc}"
+        if not items:
+            return "No repositories found. Try a broader GitHub search query."
+        rows = []
+        for index, item in enumerate(items, 1):
+            license_name = (item.get("license") or {}).get("spdx_id", "Not specified")
+            rows.append(
+                f"{index}. {item.get('full_name', 'Unknown')}\\n"
+                f"Description: {item.get('description') or 'No description'}\\n"
+                f"Stars: {item.get('stargazers_count', 0)} | Language: {item.get('language') or 'Not specified'} | "
+                f"License: {license_name}\\n"
+                f"Updated: {item.get('updated_at', 'Unknown')}\\nURL: {item.get('html_url', '')}"
+            )
+        return "\\n\\n".join(rows)
+    except requests.RequestException as exc:
+        return f"GitHub API request failed: {type(exc).__name__}: {exc}"
+    except (ValueError, TypeError, KeyError) as exc:
+        return f"Could not parse GitHub search results: {exc}"
 
 
 @tool
