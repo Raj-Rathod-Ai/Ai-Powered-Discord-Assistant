@@ -342,30 +342,45 @@ def color_converter(value: str) -> str:
         return f"Color conversion failed: {exc}"
 
 
+def search_github_repositories(query: str, max_results: int = 10) -> list[dict]:
+    """Return normalized public GitHub repositories from the Search API."""
+    limit = max(1, min(int(max_results), 10))
+    response = requests.get(
+        "https://api.github.com/search/repositories",
+        params={"q": query, "per_page": limit, "sort": "stars", "order": "desc"},
+        headers={"Accept": "application/vnd.github+json"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return [
+        {
+            "full_name": item.get("full_name", "Unknown"),
+            "description": item.get("description") or "No description",
+            "stars": item.get("stargazers_count", 0),
+            "language": item.get("language") or "Not specified",
+            "license": (item.get("license") or {}).get("spdx_id", "Not specified"),
+            "updated_at": item.get("updated_at", "Unknown"),
+            "url": item.get("html_url", ""),
+        }
+        for item in payload.get("items", [])
+    ]
+
+
 @tool
 def github_repository_search(query: str, max_results: int = 10) -> str:
-    """Search public GitHub repositories. Returns up to 10 results with stars, language, license, update time and URL."""
+    """Search public GitHub repositories. Returns up to 10 ranked results with stars, language, license, update date and URL."""
     try:
-        limit = max(1, min(int(max_results), 10))
-        response = requests.get(
-            "https://api.github.com/search/repositories",
-            params={"q": query, "per_page": limit, "sort": "stars", "order": "desc"},
-            headers={"Accept": "application/vnd.github+json"},
-            timeout=15,
-        )
-        response.raise_for_status()
-        items = response.json().get("items", [])
+        items = search_github_repositories(query, max_results)
         if not items:
             return "No repositories found. Try a broader GitHub search query."
         rows = []
         for index, item in enumerate(items, 1):
-            license_name = (item.get("license") or {}).get("spdx_id", "Not specified")
             rows.append(
-                f"{index}. {item.get('full_name', 'Unknown')}\\n"
-                f"Description: {item.get('description') or 'No description'}\\n"
-                f"Stars: {item.get('stargazers_count', 0)} | Language: {item.get('language') or 'Not specified'} | "
-                f"License: {license_name}\\n"
-                f"Updated: {item.get('updated_at', 'Unknown')}\\nURL: {item.get('html_url', '')}"
+                f"{index}. {item['full_name']}\\n"
+                f"Description: {item['description']}\\n"
+                f"Stars: {item['stars']} | Language: {item['language']} | License: {item['license']}\\n"
+                f"Updated: {item['updated_at']}\\nURL: {item['url']}"
             )
         return "\\n\\n".join(rows)
     except requests.RequestException as exc:
