@@ -342,24 +342,80 @@ def color_converter(value: str) -> str:
         return f"Color conversion failed: {exc}"
 
 
+def normalize_github_repository_query(query: str) -> str:
+    """Convert common natural-language repository requests to GitHub search syntax."""
+    cleaned = (query or "").strip()
+    cleaned = re.sub(
+        r"^(?:please\s+)?(?:find|search(?:\s+github)?|show|list)\s+(?:me\s+)?(?:the\s+)?(?:top\s+\d+\s+)?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\b(open[ -]?source|projects?|repositories|repos|using)\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = " ".join(cleaned.split())
+    if not cleaned:
+        cleaned = "RAG"
+    if re.search(r"\bpython\b", cleaned, flags=re.IGNORECASE) and not re.search(r"language:", cleaned, flags=re.IGNORECASE):
+        cleaned = re.sub(r"\bpython\b", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = " ".join(cleaned.split()) + " language:Python"
+    if "is:public" not in cleaned:
+        cleaned += " is:public"
+    if "fork:" not in cleaned:
+        cleaned += " fork:false"
+    return cleaned
+
+
+def search_github_repositories(query: str, max_results: int = 10) -> list[dict]:
+    """Return normalized public GitHub repositories from the Search API."""
+    limit = max(1, min(int(max_results), 10))
+    open_source_requested = bool(re.search(r"\bopen[ -]?source\b", query or "", flags=re.IGNORECASE))
+    search_query = normalize_github_repository_query(query)
+    response = requests.get(
+        "https://api.github.com/search/repositories",
+        params={"q": search_query, "per_page": 100 if open_source_requested else limit, "sort": "stars", "order": "desc"},
+        headers={"Accept": "application/vnd.github+json"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    raw_items = payload.get("items", [])
+    if open_source_requested:
+        raw_items = [item for item in raw_items if (item.get("license") or {}).get("spdx_id") not in (None, "", "NOASSERTION")]
+    raw_items = raw_items[:limit]
+    return [
+        {
+            "full_name": item.get("full_name", "Unknown"),
+            "description": item.get("description") or "No description",
+            "stars": item.get("stargazers_count", 0),
+            "language": item.get("language") or "Not specified",
+            "license": (item.get("license") or {}).get("spdx_id", "Not specified"),
+            "updated_at": item.get("updated_at", "Unknown"),
+            "url": item.get("html_url", ""),
+        }
+        for item in raw_items
+    ]
+
+
 @tool
-def github_repository_search(query: str) -> str:
-    """Search public GitHub repositories without an access token."""
+def github_repository_search(query: str, max_results: int = 10) -> str:
+    """Search public GitHub repositories. Returns up to 10 ranked results with stars, language, license, update date and URL."""
     try:
-        response = requests.get(
-            "https://api.github.com/search/repositories",
-            params={"q": query, "per_page": 5},
-            headers={"Accept": "application/vnd.github+json"},
-            timeout=12,
-        )
-        response.raise_for_status()
-        items = response.json().get("items", [])
-        return "\n".join(
-            f"{item['full_name']} — {item.get('description') or 'No description'}\n{item['html_url']}"
-            for item in items
-        ) or "No repositories found."
-    except Exception as exc:
-        return f"GitHub search failed: {exc}"
+        items = search_github_repositories(query, max_results)
+        if not items:
+            return "No repositories found. Try a broader GitHub search query."
+        rows = []
+        for index, item in enumerate(items, 1):
+            rows.append(
+                f"{index}. {item['full_name']}\n"
+                f"Description: {item['description']}\n"
+                f"Stars: {item['stars']} | Language: {item['language']} | License: {item['license']}\n"
+                f"Updated: {item['updated_at']}\nURL: {item['url']}"
+            )
+        return "\n\n".join(rows)
+    except requests.RequestException as exc:
+        return f"GitHub API request failed: {type(exc).__name__}: {exc}"
+    except (ValueError, TypeError, KeyError) as exc:
+        return f"Could not parse GitHub search results: {exc}"
 
 
 @tool

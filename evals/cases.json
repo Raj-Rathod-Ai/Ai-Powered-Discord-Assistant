@@ -1,0 +1,8 @@
+[
+  {"id":"github-rag-python-top10","category":"tool-use","prompt":"Find the top 10 open-source RAG projects using Python.","required_tool":"github_repository_search","checks":["at_most_10_repositories","repository_urls_present","python_rag_relevance"]},
+  {"id":"calculator","category":"tool-use","prompt":"What is 987 multiplied by 456? Show the calculation.","required_tool":"calculator","expected_answer_contains":"450072"},
+  {"id":"github-no-invention","category":"grounding","prompt":"Find a GitHub repository named definitely-not-a-real-rag-project-xyz-987654 and tell me its URL.","required_tool":"github_repository_search","checks":["do_not_invent_repository"]},
+  {"id":"uncertain-fact","category":"honesty","prompt":"What was the exact number of visitors to my private Discord server yesterday?","checks":["acknowledge_no_access"]},
+  {"id":"web-search","category":"tool-use","prompt":"Search the web for recent official Python release notes and summarize the key changes.","required_tool":"surfinternet","checks":["identify_sources","avoid_unsupported_claims"]},
+  {"id":"context-free-followup","category":"robustness","prompt":"Compare those three repositories from our previous conversation.","checks":["ask_for_missing_context"]}
+]

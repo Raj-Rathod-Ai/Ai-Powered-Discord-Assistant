@@ -15,7 +15,8 @@ from langchain.messages import HumanMessage
 from PIL import Image
 
 from agent import agent, generate_image
-from tools import create_art_qr
+from tools import create_art_qr, search_github_repositories
+from channel_policy import allowed_channel_ids, is_allowed_channel
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 active_users = set()
+ALLOWED_CHANNEL_IDS = allowed_channel_ids(os.getenv("DISCORD_ALLOWED_CHANNEL_IDS", ""))
 guild_id = os.getenv("DISCORD_GUILD_ID")
 
 
@@ -87,7 +89,25 @@ async def send_agent_response(channel, prompt):
         await channel.send(part)
 
 
+def channel_access_check(interaction: discord.Interaction) -> bool:
+    return is_allowed_channel(interaction.channel_id, ALLOWED_CHANNEL_IDS)
+
+
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CheckFailure):
+        message = "Rudra is restricted to the configured channel. Please use the approved channel."
+    else:
+        logger.error("Slash command failed: %s", error, exc_info=(type(error), error, error.__traceback__))
+        message = "That command failed. Please try again later."
+    if interaction.response.is_done():
+        await interaction.followup.send(message, ephemeral=True)
+    else:
+        await interaction.response.send_message(message, ephemeral=True)
+
+
 @tree.command(name="tools", description="Show Rudra's available AI tools")
+@app_commands.check(channel_access_check)
 async def tools_command(interaction: discord.Interaction):
     names = [
         "Web search and news",
@@ -98,18 +118,20 @@ async def tools_command(interaction: discord.Interaction):
         "JSON, Base64, URL and Markdown utilities",
         "Password, UUID, date and word-count utilities",
         "Regex, hash and color utilities",
-        "Public GitHub repository search",
+        "Public GitHub repository search with /github",
     ]
     await interaction.response.send_message("\n".join(f"• {name}" for name in names), ephemeral=True)
 
 
 @tree.command(name="start", description="Activate Rudra AI in this channel")
+@app_commands.check(channel_access_check)
 async def start(interaction: discord.Interaction):
     active_users.add((interaction.user.id, interaction.channel_id))
     await interaction.response.send_message("Rudra is active in this channel for you.", ephemeral=True)
 
 
 @tree.command(name="stop", description="Deactivate Rudra AI in this channel")
+@app_commands.check(channel_access_check)
 async def stop(interaction: discord.Interaction):
     active_users.discard((interaction.user.id, interaction.channel_id))
     await interaction.response.send_message("Rudra has been deactivated for you in this channel.", ephemeral=True)
@@ -125,6 +147,7 @@ async def stop(interaction: discord.Interaction):
     app_commands.Choice(name="Violet", value="violet"),
     app_commands.Choice(name="Developer", value="developer"),
 ])
+@app_commands.check(channel_access_check)
 async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attachment = None, style: app_commands.Choice[str] = None):
     await interaction.response.defer(thinking=True, ephemeral=True)
     try:
@@ -146,6 +169,60 @@ async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attach
         await interaction.followup.send(f"Could not generate the QR code: {exc}", ephemeral=True)
 
 
+def format_github_repository(item: dict) -> tuple[str, str]:
+    """Format one normalized GitHub repository for a Discord embed field."""
+    name = discord.utils.escape_markdown(str(item.get("full_name") or "Unknown repository"))[:110]
+    description = discord.utils.escape_mentions(discord.utils.escape_markdown(str(item.get("description") or "No description provided.")))
+    if len(description) > 180:
+        description = description[:177].rstrip() + "..."
+    url = str(item.get("url") or "")
+    if not re.fullmatch(r"https://github\.com/[^/\s]+/[^/\s]+", url):
+        url = ""
+    link = f"[Open repository]({url})" if url else "Repository URL unavailable"
+    stars = max(0, int(item.get("stars", 0) or 0))
+    language = discord.utils.escape_markdown(str(item.get("language") or "Not specified"))[:35]
+    license_name = discord.utils.escape_markdown(str(item.get("license") or "Not specified"))[:35]
+    updated = str(item.get("updated_at") or "Unknown")[:10]
+    value = (
+        f"{description}\n"
+        f"⭐ {stars:,} · **Language:** {language} · **License:** {license_name}\n"
+        f"**Updated:** {updated} · {link}"
+    )
+    return name, value[:1000]
+
+
+@tree.command(name="github", description="Search GitHub repositories and show up to 10 results")
+@app_commands.describe(query="GitHub search query, e.g. RAG language:Python", limit="Number of results (1–10)")
+@app_commands.check(channel_access_check)
+async def github_command(interaction: discord.Interaction, query: str, limit: app_commands.Range[int, 1, 10] = 10):
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    try:
+        repositories = await asyncio.to_thread(search_github_repositories, query, limit)
+        if not repositories:
+            await interaction.followup.send(
+                f"No repositories found for `{query}`. Try a broader search, such as `RAG language:Python`.",
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="GitHub Repository Search",
+            description=f"Query: `{discord.utils.escape_mentions(query[:150])}`\nSorted by stars · Showing {len(repositories)} result(s)",
+            color=discord.Color.blurple(),
+        )
+        for index, repository in enumerate(repositories[:10], 1):
+            name, value = format_github_repository(repository)
+            embed.add_field(name=f"{index}. {name}", value=value, inline=False)
+        embed.set_footer(text="Data returned by GitHub Search API · Stars and metadata may change")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    except Exception as exc:
+        logger.exception("GitHub repository search failed")
+        await interaction.followup.send(
+            f"GitHub search failed ({type(exc).__name__}). Check the bot logs and try again.",
+            ephemeral=True,
+        )
+
+
 @client.event
 async def on_ready():
     try:
@@ -163,6 +240,8 @@ async def on_ready():
 @client.event
 async def on_message(message):
     if message.author.bot:
+        return
+    if not is_allowed_channel(message.channel.id, ALLOWED_CHANNEL_IDS):
         return
     if (message.author.id, message.channel.id) not in active_users:
         return
@@ -211,6 +290,10 @@ async def main():
     token = os.getenv("DISCORD_API_KEY")
     if not token:
         raise RuntimeError("DISCORD_API_KEY is required.")
+    if not ALLOWED_CHANNEL_IDS:
+        logger.warning("DISCORD_ALLOWED_CHANNEL_IDS is empty; all Discord channels are blocked by default.")
+    else:
+        logger.info("Discord channel allowlist loaded with %d channel(s).", len(ALLOWED_CHANNEL_IDS))
     start_health_server()
     async with client:
         await client.start(token)
