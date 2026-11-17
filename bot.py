@@ -170,9 +170,9 @@ async def on_message(message):
     # Handle explicit QR requests deterministically so the image is always attached,
     # rather than relying on the language model to invoke and relay a file tool.
     if "qr" in content.lower():
-        url_match = re.search(r"https?://[^\\s<>]+", content)
+        url_match = re.search(r"https?://[^\s<>]+", content)
         if url_match:
-            target_url = url_match.group(0).rstrip(".,;:!?)\\\\]")
+            target_url = url_match.group(0).rstrip(".,;:!?)\\]")
             try:
                 async with message.channel.typing():
                     qr_path = await asyncio.to_thread(create_art_qr, target_url, "developer")
