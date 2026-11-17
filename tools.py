@@ -368,7 +368,7 @@ def normalize_github_repository_query(query: str) -> str:
 def search_github_repositories(query: str, max_results: int = 10) -> list[dict]:
     """Return normalized public GitHub repositories from the Search API."""
     limit = max(1, min(int(max_results), 10))
-    open_source_requested = bool(re.search(r"\\bopen[ -]?source\\b", query or "", flags=re.IGNORECASE))
+    open_source_requested = bool(re.search(r"\bopen[ -]?source\b", query or "", flags=re.IGNORECASE))
     search_query = normalize_github_repository_query(query)
     response = requests.get(
         "https://api.github.com/search/repositories",
