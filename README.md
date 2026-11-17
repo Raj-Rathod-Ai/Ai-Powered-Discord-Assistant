@@ -8,7 +8,7 @@ Rudra is a Python Discord assistant built with discord.py, LangChain, Ollama, Qw
 - Tavily and DuckDuckGo web search
 - Cloudflare FLUX image generation with the `!imagine` command
 - Artistic QR codes with `/aiqr`, using an optional uploaded image as the QR texture
-- Per-user, per-channel activation with `/start` and `/stop`
+- Per-user activation with `/start` and `/stop`, constrained by a fail-closed channel allowlist
 - Calculator, Wikipedia, public webpage reader and YouTube transcript retrieval
 - Translation, text summarization and unit conversion
 - JSON formatting, password generation, Base64 and URL encoding
@@ -67,6 +67,7 @@ CLOUDFLARE_MODEL=@cf/black-forest-labs/flux-1-schnell
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
 DISCORD_GUILD_ID=your_test_server_id
+DISCORD_ALLOWED_CHANNEL_IDS=1572151691539648564
 PORT=10000
 ```
 
@@ -130,7 +131,7 @@ Required environment variables:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_MODEL`
 
-`CLOUDFLARE_IMAGE_MODEL` defaults to the FLUX model in `render.yaml`. `TAVILY_API_KEY` enables web and news search. `DISCORD_GUILD_ID` is optional; when set, slash commands are synced to that server for faster development updates. Leave it empty to sync globally. `OLLAMA_BASE_URL` is only needed if you choose the Ollama fallback instead of Cloudflare chat.
+`CLOUDFLARE_IMAGE_MODEL` defaults to the FLUX model in `render.yaml`. `TAVILY_API_KEY` enables web and news search. `DISCORD_GUILD_ID` is optional; when set, slash commands are synced to that server for faster development updates. Leave it empty to sync globally. `DISCORD_ALLOWED_CHANNEL_IDS` is a comma-separated allowlist of channel IDs; when empty, all channels are blocked. `OLLAMA_BASE_URL` is only needed if you choose the Ollama fallback instead of Cloudflare chat.
 
 ### Ollama on Render
 
@@ -157,3 +158,9 @@ This project runs a Discord Gateway connection and an HTTP health server in the 
 ## License
 
 Add a license file if you intend to publish reuse permissions for this project.
+
+## Tests and LLM evaluations
+
+Run offline unit tests with `pytest -q`.
+
+Run provider-backed LLM evaluations with `RUN_LIVE_LLM_EVALS=1 python evals/run_eval.py` after configuring credentials. The suite records prompts, invoked tools and answers in `evals/results.json`. Review answers against `evals/cases.json`; completion alone does not prove factual correctness. See [docs/FEATURE_AUDIT.md](docs/FEATURE_AUDIT.md) for the feature inventory and release checklist.
