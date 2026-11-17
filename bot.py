@@ -15,7 +15,7 @@ from langchain.messages import HumanMessage
 from PIL import Image
 
 from agent import agent, generate_image
-from tools import create_art_qr
+from tools import create_art_qr, search_github_repositories
 from channel_policy import allowed_channel_ids, is_allowed_channel
 
 load_dotenv()
@@ -118,7 +118,7 @@ async def tools_command(interaction: discord.Interaction):
         "JSON, Base64, URL and Markdown utilities",
         "Password, UUID, date and word-count utilities",
         "Regex, hash and color utilities",
-        "Public GitHub repository search",
+        "Public GitHub repository search with /github",
     ]
     await interaction.response.send_message("\n".join(f"• {name}" for name in names), ephemeral=True)
 
@@ -167,6 +167,60 @@ async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attach
     except Exception as exc:
         logger.exception("QR generation failed")
         await interaction.followup.send(f"Could not generate the QR code: {exc}", ephemeral=True)
+
+
+def format_github_repository(item: dict) -> tuple[str, str]:
+    """Format one normalized GitHub repository for a Discord embed field."""
+    name = str(item.get("full_name") or "Unknown repository")[:250]
+    description = str(item.get("description") or "No description provided.")
+    if len(description) > 260:
+        description = description[:257].rstrip() + "..."
+    url = str(item.get("url") or "")
+    if not re.fullmatch(r"https://github\\.com/[^/\\s]+/[^/\\s]+", url):
+        url = ""
+    link = f"[Open repository]({url})" if url else "Repository URL unavailable"
+    stars = item.get("stars", 0)
+    language = str(item.get("language") or "Not specified")
+    license_name = str(item.get("license") or "Not specified")
+    updated = str(item.get("updated_at") or "Unknown")[:10]
+    value = (
+        f"{description}\\n"
+        f"⭐ {stars:,} · **Language:** {language} · **License:** {license_name}\\n"
+        f"**Updated:** {updated} · {link}"
+    )
+    return name, value[:1000]
+
+
+@tree.command(name="github", description="Search GitHub repositories and show up to 10 results")
+@app_commands.describe(query="GitHub search query, e.g. RAG language:Python", limit="Number of results (1–10)")
+@app_commands.check(channel_access_check)
+async def github_command(interaction: discord.Interaction, query: str, limit: app_commands.Range[int, 1, 10] = 10):
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    try:
+        repositories = await asyncio.to_thread(search_github_repositories, query, limit)
+        if not repositories:
+            await interaction.followup.send(
+                f"No repositories found for `{query}`. Try a broader search, such as `RAG language:Python`.",
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="GitHub Repository Search",
+            description=f"Query: `{query[:180]}`\\nSorted by stars · Showing {len(repositories)} result(s)",
+            color=discord.Color.blurple(),
+        )
+        for index, repository in enumerate(repositories[:10], 1):
+            name, value = format_github_repository(repository)
+            embed.add_field(name=f"{index}. {name}", value=value, inline=False)
+        embed.set_footer(text="Data returned by GitHub Search API · Stars and metadata may change")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    except Exception as exc:
+        logger.exception("GitHub repository search failed")
+        await interaction.followup.send(
+            f"GitHub search failed ({type(exc).__name__}). Check the bot logs and try again.",
+            ephemeral=True,
+        )
 
 
 @client.event
