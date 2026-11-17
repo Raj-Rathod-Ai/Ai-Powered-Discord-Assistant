@@ -10,7 +10,7 @@ from tavily import TavilyClient
 from tools import ALL_TOOLS
 
 load_dotenv()
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if os.getenv("TAVILY_API_KEY") else None
 
 
 @tool
