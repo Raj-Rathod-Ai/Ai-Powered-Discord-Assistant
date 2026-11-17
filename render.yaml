@@ -23,3 +23,5 @@ services:
         value: qwen2.5:7b
       - key: DISCORD_GUILD_ID
         sync: false
+      - key: DISCORD_ALLOWED_CHANNEL_IDS
+        sync: false
