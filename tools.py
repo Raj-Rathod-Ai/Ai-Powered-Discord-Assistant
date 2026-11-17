@@ -125,6 +125,7 @@ def youtube_transcript(video_url: str) -> str:
 
 
 def create_art_qr(url, style="original", reference_image=None):
+    _safe_url(url)
     styles = {
         "original": ("#111111", "#ffffff"),
         "ocean": ("#075985", "#effaff"),
@@ -208,7 +209,7 @@ def summarize_text(text: str) -> str:
     """Summarize text using the assistant's locally configured Ollama model."""
     try:
         from langchain_ollama import ChatOllama
-        model = ChatOllama(model="qwen2.5:7b", temperature=0.2, num_predict=400)
+        model = ChatOllama(model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"), base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"), temperature=0.2, num_predict=400)
         result = model.invoke(f"Summarize the following text clearly and accurately:\n\n{text[:12000]}")
         return str(result.content)
     except Exception as exc:
@@ -363,6 +364,8 @@ def latest_news(query: str) -> str:
     """Search recent news using the already configured Tavily search integration."""
     try:
         from agent import tavily_client
+        if tavily_client is None:
+            return "News search requires the existing TAVILY_API_KEY configuration."
         results = tavily_client.search(query=query, topic="news", max_results=5)
         return json.dumps(results, ensure_ascii=False)[:10000]
     except Exception as exc:
