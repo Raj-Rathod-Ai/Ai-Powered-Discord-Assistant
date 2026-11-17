@@ -342,12 +342,35 @@ def color_converter(value: str) -> str:
         return f"Color conversion failed: {exc}"
 
 
+def normalize_github_repository_query(query: str) -> str:
+    """Convert common natural-language repository requests to GitHub search syntax."""
+    cleaned = (query or "").strip()
+    cleaned = re.sub(
+        r"^(?:please\s+)?(?:find|search(?:\s+github)?|show|list)\s+(?:me\s+)?(?:the\s+)?(?:top\s+\d+\s+)?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\b(open[ -]?source|projects?|repositories|repos|using)\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = " ".join(cleaned.split())
+    if not cleaned:
+        cleaned = "RAG"
+    if re.search(r"\bpython\b", cleaned, flags=re.IGNORECASE) and not re.search(r"language:", cleaned, flags=re.IGNORECASE):
+        cleaned += " language:Python"
+    if "is:public" not in cleaned:
+        cleaned += " is:public"
+    if "fork:" not in cleaned:
+        cleaned += " fork:false"
+    return cleaned
+
+
 def search_github_repositories(query: str, max_results: int = 10) -> list[dict]:
     """Return normalized public GitHub repositories from the Search API."""
     limit = max(1, min(int(max_results), 10))
+    search_query = normalize_github_repository_query(query)
     response = requests.get(
         "https://api.github.com/search/repositories",
-        params={"q": query, "per_page": limit, "sort": "stars", "order": "desc"},
+        params={"q": search_query, "per_page": limit, "sort": "stars", "order": "desc"},
         headers={"Accept": "application/vnd.github+json"},
         timeout=15,
     )
