@@ -356,7 +356,8 @@ def normalize_github_repository_query(query: str) -> str:
     if not cleaned:
         cleaned = "RAG"
     if re.search(r"\bpython\b", cleaned, flags=re.IGNORECASE) and not re.search(r"language:", cleaned, flags=re.IGNORECASE):
-        cleaned += " language:Python"
+        cleaned = re.sub(r"\bpython\b", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = " ".join(cleaned.split()) + " language:Python"
     if "is:public" not in cleaned:
         cleaned += " is:public"
     if "fork:" not in cleaned:
