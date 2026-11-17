@@ -133,6 +133,7 @@ def create_art_qr(url, style="original", reference_image=None):
         "forest": ("#14532d", "#f0fdf4"),
         "sunset": ("#9a3412", "#fff7ed"),
         "violet": ("#5b21b6", "#faf5ff"),
+        "developer": ("#102A43", "#EAF6FF"),
     }
     foreground, background = styles.get(style.lower(), styles["original"])
     qr = qrcode.QRCode(
@@ -174,11 +175,12 @@ def create_art_qr(url, style="original", reference_image=None):
             x0, y0 = left * scale, top * scale
             mask_draw.rectangle((x0, y0, x0 + 7 * scale, y0 + 7 * scale), fill=0)
         canvas.paste(texture, (0, 0), mask)
+    finder_color = "#087E8B" if style.lower() == "developer" else foreground
     for top, left in ((0, 0), (0, size - 7), (size - 7, 0)):
         x0, y0 = left * scale, top * scale
-        draw.rectangle((x0, y0, x0 + 7 * scale - 1, y0 + 7 * scale - 1), fill=foreground)
+        draw.rectangle((x0, y0, x0 + 7 * scale - 1, y0 + 7 * scale - 1), fill=finder_color)
         draw.rectangle((x0 + scale, y0 + scale, x0 + 6 * scale - 1, y0 + 6 * scale - 1), fill=background)
-        draw.rectangle((x0 + 2 * scale, y0 + 2 * scale, x0 + 5 * scale - 1, y0 + 5 * scale - 1), fill=foreground)
+        draw.rectangle((x0 + 2 * scale, y0 + 2 * scale, x0 + 5 * scale - 1, y0 + 5 * scale - 1), fill=finder_color)
     output = Image.new("RGB", (canvas_size + 80, canvas_size + 80), "white")
     output.paste(canvas, (40, 40))
     path = OUTPUT_DIR / f"qr_{uuid.uuid4().hex}.png"
@@ -188,7 +190,7 @@ def create_art_qr(url, style="original", reference_image=None):
 
 @tool
 def generate_qr(url: str, style: str = "original") -> str:
-    """Create a downloadable static QR code for a URL. Styles: original, ocean, forest, sunset, violet."""
+    """Create a downloadable static QR code for a URL. Styles: original, ocean, forest, sunset, violet, developer."""
     try:
         path = create_art_qr(url, style)
         return f"QR image created: {path}"
