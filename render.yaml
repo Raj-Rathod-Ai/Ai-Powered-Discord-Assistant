@@ -17,6 +17,8 @@ services:
         sync: false
       - key: CLOUDFLARE_MODEL
         sync: false
+      - key: CLOUDFLARE_IMAGE_MODEL
+        value: "@cf/black-forest-labs/flux-1-schnell"
       - key: OLLAMA_BASE_URL
         sync: false
       - key: OLLAMA_MODEL
