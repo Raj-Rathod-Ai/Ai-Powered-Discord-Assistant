@@ -10,7 +10,7 @@ from tavily import TavilyClient
 from tools import ALL_TOOLS
 
 load_dotenv()
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if os.getenv("TAVILY_API_KEY") else None
+tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if os.getenv("TAVILY_API_KEY") else None if os.getenv("TAVILY_API_KEY") else None
 
 
 @tool
@@ -18,7 +18,7 @@ def generate_image(prompt: str) -> str:
     """Generate an image using Cloudflare Workers AI and return Base64 image data."""
     account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
     token = os.getenv("CLOUDFLARE_API_TOKEN")
-    model_name = os.getenv("CLOUDFLARE_MODEL", "@cf/black-forest-labs/flux-1-schnell")
+    model_name = os.getenv("CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-1-schnell")
     if not account_id or not token:
         raise RuntimeError("Cloudflare account credentials are not configured.")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model_name}"
@@ -33,7 +33,7 @@ def generate_image(prompt: str) -> str:
 @tool
 def surfinternet(query: str) -> str:
     """Search the internet using Tavily and return relevant results."""
-    if not os.getenv("TAVILY_API_KEY"):
+    if tavily_client is None:
         return "Web search is unavailable because TAVILY_API_KEY is not configured."
     return str(tavily_client.search(query=query, max_results=5))
 
@@ -52,14 +52,29 @@ def ddg_search(query: str) -> str:
     return str(results) if results else "No search results found."
 
 
-model = ChatOllama(
-    model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-    temperature=0.5,
-    num_predict=512,
-    num_ctx=4096,
-    keep_alive="30m",
-)
+cloudflare_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+cloudflare_token = os.getenv("CLOUDFLARE_API_TOKEN")
+cloudflare_model = os.getenv("CLOUDFLARE_MODEL")
+
+if cloudflare_account and cloudflare_token and cloudflare_model:
+    from langchain_openai import ChatOpenAI
+
+    model = ChatOpenAI(
+        model=cloudflare_model,
+        api_key=cloudflare_token,
+        base_url=f"https://api.cloudflare.com/client/v4/accounts/{cloudflare_account}/ai/v1",
+        temperature=0.5,
+        max_tokens=512,
+    )
+else:
+    model = ChatOllama(
+        model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        temperature=0.5,
+        num_predict=512,
+        num_ctx=4096,
+        keep_alive="30m",
+    )
 
 system_prompt = """
 You are Rudra, an AI assistant created by Raj for Discord communities.
