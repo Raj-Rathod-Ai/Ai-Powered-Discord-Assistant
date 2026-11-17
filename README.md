@@ -128,9 +128,9 @@ Required environment variables:
 - `DISCORD_API_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
-- `OLLAMA_BASE_URL`
+- `CLOUDFLARE_MODEL`
 
-`TAVILY_API_KEY` enables web and news search. `DISCORD_GUILD_ID` is optional; when set, slash commands are synced to that server for faster development updates. Leave it empty to sync globally.
+`CLOUDFLARE_IMAGE_MODEL` defaults to the FLUX model in `render.yaml`. `TAVILY_API_KEY` enables web and news search. `DISCORD_GUILD_ID` is optional; when set, slash commands are synced to that server for faster development updates. Leave it empty to sync globally. `OLLAMA_BASE_URL` is only needed if you choose the Ollama fallback instead of Cloudflare chat.
 
 ### Ollama on Render
 
