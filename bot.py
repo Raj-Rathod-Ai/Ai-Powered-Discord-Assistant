@@ -16,6 +16,7 @@ from PIL import Image
 
 from agent import agent, generate_image
 from tools import create_art_qr
+from channel_policy import allowed_channel_ids, is_allowed_channel
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 active_users = set()
+ALLOWED_CHANNEL_IDS = allowed_channel_ids(os.getenv("DISCORD_ALLOWED_CHANNEL_IDS", ""))
 guild_id = os.getenv("DISCORD_GUILD_ID")
 
 
@@ -87,7 +89,25 @@ async def send_agent_response(channel, prompt):
         await channel.send(part)
 
 
+def channel_access_check(interaction: discord.Interaction) -> bool:
+    return is_allowed_channel(interaction.channel_id, ALLOWED_CHANNEL_IDS)
+
+
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CheckFailure):
+        message = "Rudra is restricted to the configured channel. Please use the approved channel."
+    else:
+        logger.error("Slash command failed: %s", error, exc_info=(type(error), error, error.__traceback__))
+        message = "That command failed. Please try again later."
+    if interaction.response.is_done():
+        await interaction.followup.send(message, ephemeral=True)
+    else:
+        await interaction.response.send_message(message, ephemeral=True)
+
+
 @tree.command(name="tools", description="Show Rudra's available AI tools")
+@app_commands.check(channel_access_check)
 async def tools_command(interaction: discord.Interaction):
     names = [
         "Web search and news",
@@ -104,12 +124,14 @@ async def tools_command(interaction: discord.Interaction):
 
 
 @tree.command(name="start", description="Activate Rudra AI in this channel")
+@app_commands.check(channel_access_check)
 async def start(interaction: discord.Interaction):
     active_users.add((interaction.user.id, interaction.channel_id))
     await interaction.response.send_message("Rudra is active in this channel for you.", ephemeral=True)
 
 
 @tree.command(name="stop", description="Deactivate Rudra AI in this channel")
+@app_commands.check(channel_access_check)
 async def stop(interaction: discord.Interaction):
     active_users.discard((interaction.user.id, interaction.channel_id))
     await interaction.response.send_message("Rudra has been deactivated for you in this channel.", ephemeral=True)
@@ -125,6 +147,7 @@ async def stop(interaction: discord.Interaction):
     app_commands.Choice(name="Violet", value="violet"),
     app_commands.Choice(name="Developer", value="developer"),
 ])
+@app_commands.check(channel_access_check)
 async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attachment = None, style: app_commands.Choice[str] = None):
     await interaction.response.defer(thinking=True, ephemeral=True)
     try:
@@ -163,6 +186,8 @@ async def on_ready():
 @client.event
 async def on_message(message):
     if message.author.bot:
+        return
+    if not is_allowed_channel(message.channel.id, ALLOWED_CHANNEL_IDS):
         return
     if (message.author.id, message.channel.id) not in active_users:
         return
@@ -211,6 +236,10 @@ async def main():
     token = os.getenv("DISCORD_API_KEY")
     if not token:
         raise RuntimeError("DISCORD_API_KEY is required.")
+    if not ALLOWED_CHANNEL_IDS:
+        logger.warning("DISCORD_ALLOWED_CHANNEL_IDS is empty; all Discord channels are blocked by default.")
+    else:
+        logger.info("Discord channel allowlist loaded with %d channel(s).", len(ALLOWED_CHANNEL_IDS))
     start_health_server()
     async with client:
         await client.start(token)
