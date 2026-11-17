@@ -3,6 +3,7 @@ import base64
 import io
 import logging
 import os
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -122,6 +123,7 @@ async def stop(interaction: discord.Interaction):
     app_commands.Choice(name="Forest", value="forest"),
     app_commands.Choice(name="Sunset", value="sunset"),
     app_commands.Choice(name="Violet", value="violet"),
+    app_commands.Choice(name="Developer", value="developer"),
 ])
 async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attachment = None, style: app_commands.Choice[str] = None):
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -165,6 +167,24 @@ async def on_message(message):
     if (message.author.id, message.channel.id) not in active_users:
         return
     content = message.content.strip()
+    # Handle explicit QR requests deterministically so the image is always attached,
+    # rather than relying on the language model to invoke and relay a file tool.
+    if "qr" in content.lower():
+        url_match = re.search(r"https?://[^\\s<>]+", content)
+        if url_match:
+            target_url = url_match.group(0).rstrip(".,;:!?)\\\\]")
+            try:
+                async with message.channel.typing():
+                    qr_path = await asyncio.to_thread(create_art_qr, target_url, "developer")
+                await message.channel.send(
+                    content="**Developer-style QR generated** · Scan to open the GitHub profile/repository page.",
+                    file=discord.File(qr_path, filename="rudra-developer-qr.png"),
+                )
+                Path(qr_path).unlink(missing_ok=True)
+            except Exception:
+                logger.exception("Developer QR request failed")
+                await message.channel.send("I could not generate that QR code. Please check that the link is a valid public URL.")
+            return
     if not content and not message.attachments:
         return
     if content.lower().startswith("!imagine "):
