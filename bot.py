@@ -171,21 +171,21 @@ async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attach
 
 def format_github_repository(item: dict) -> tuple[str, str]:
     """Format one normalized GitHub repository for a Discord embed field."""
-    name = str(item.get("full_name") or "Unknown repository")[:250]
-    description = str(item.get("description") or "No description provided.")
-    if len(description) > 260:
-        description = description[:257].rstrip() + "..."
+    name = discord.utils.escape_markdown(str(item.get("full_name") or "Unknown repository"))[:110]
+    description = discord.utils.escape_mentions(discord.utils.escape_markdown(str(item.get("description") or "No description provided.")))
+    if len(description) > 180:
+        description = description[:177].rstrip() + "..."
     url = str(item.get("url") or "")
-    if not re.fullmatch(r"https://github\\.com/[^/\\s]+/[^/\\s]+", url):
+    if not re.fullmatch(r"https://github\.com/[^/\s]+/[^/\s]+", url):
         url = ""
     link = f"[Open repository]({url})" if url else "Repository URL unavailable"
-    stars = item.get("stars", 0)
-    language = str(item.get("language") or "Not specified")
-    license_name = str(item.get("license") or "Not specified")
+    stars = max(0, int(item.get("stars", 0) or 0))
+    language = discord.utils.escape_markdown(str(item.get("language") or "Not specified"))[:35]
+    license_name = discord.utils.escape_markdown(str(item.get("license") or "Not specified"))[:35]
     updated = str(item.get("updated_at") or "Unknown")[:10]
     value = (
-        f"{description}\\n"
-        f"⭐ {stars:,} · **Language:** {language} · **License:** {license_name}\\n"
+        f"{description}\n"
+        f"⭐ {stars:,} · **Language:** {language} · **License:** {license_name}\n"
         f"**Updated:** {updated} · {link}"
     )
     return name, value[:1000]
@@ -207,7 +207,7 @@ async def github_command(interaction: discord.Interaction, query: str, limit: ap
 
         embed = discord.Embed(
             title="GitHub Repository Search",
-            description=f"Query: `{query[:180]}`\\nSorted by stars · Showing {len(repositories)} result(s)",
+            description=f"Query: `{discord.utils.escape_mentions(query[:150])}`\nSorted by stars · Showing {len(repositories)} result(s)",
             color=discord.Color.blurple(),
         )
         for index, repository in enumerate(repositories[:10], 1):
