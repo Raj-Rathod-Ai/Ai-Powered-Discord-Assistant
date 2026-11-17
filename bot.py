@@ -89,6 +89,8 @@ async def send_agent_response(channel, prompt):
 
 @tree.command(name="tools", description="Show Rudra's available AI tools")
 async def tools_command(interaction: discord.Interaction):
+    logger.info("Slash command /tools received: user_id=%s channel_id=%s", interaction.user.id, interaction.channel_id)
+    await interaction.response.defer(ephemeral=True, thinking=True)
     names = [
         "Web search and news",
         "Image generation and artistic QR codes",
@@ -100,19 +102,50 @@ async def tools_command(interaction: discord.Interaction):
         "Regex, hash and color utilities",
         "Public GitHub repository search",
     ]
-    await interaction.response.send_message("\n".join(f"• {name}" for name in names), ephemeral=True)
+    await interaction.followup.send("\n".join(f"• {name}" for name in names), ephemeral=True)
 
 
 @tree.command(name="start", description="Activate Rudra AI in this channel")
 async def start(interaction: discord.Interaction):
+    logger.info(
+        "Slash command /start received: user_id=%s channel_id=%s guild_id=%s",
+        interaction.user.id, interaction.channel_id, interaction.guild_id,
+    )
+    # Acknowledge immediately so Discord's short interaction deadline is met.
+    await interaction.response.defer(ephemeral=True, thinking=True)
     active_users.add((interaction.user.id, interaction.channel_id))
-    await interaction.response.send_message("Rudra is active in this channel for you.", ephemeral=True)
+    await interaction.followup.send("Rudra is active in this channel for you.", ephemeral=True)
+    logger.info("Slash command /start completed: user_id=%s channel_id=%s", interaction.user.id, interaction.channel_id)
 
 
 @tree.command(name="stop", description="Deactivate Rudra AI in this channel")
 async def stop(interaction: discord.Interaction):
+    logger.info(
+        "Slash command /stop received: user_id=%s channel_id=%s guild_id=%s",
+        interaction.user.id, interaction.channel_id, interaction.guild_id,
+    )
+    await interaction.response.defer(ephemeral=True, thinking=True)
     active_users.discard((interaction.user.id, interaction.channel_id))
-    await interaction.response.send_message("Rudra has been deactivated for you in this channel.", ephemeral=True)
+    await interaction.followup.send("Rudra has been deactivated for you in this channel.", ephemeral=True)
+    logger.info("Slash command /stop completed: user_id=%s channel_id=%s", interaction.user.id, interaction.channel_id)
+
+
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    command_name = interaction.command.name if interaction.command else "unknown"
+    logger.error(
+        "Slash command /%s failed: user_id=%s channel_id=%s",
+        command_name, interaction.user.id, interaction.channel_id,
+        exc_info=(type(error), error, error.__traceback__),
+    )
+    message = "Rudra could not complete that command. The error has been logged; please try again."
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+    except discord.HTTPException:
+        logger.exception("Could not send slash-command error response")
 
 
 @tree.command(name="aiqr", description="Create an artistic QR code from a URL and optional image")
