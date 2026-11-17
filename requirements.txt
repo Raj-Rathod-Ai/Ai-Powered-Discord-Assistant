@@ -1,8 +1,8 @@
 discord.py>=2.4,<3
 python-dotenv>=1.0
-langchain>=0.3
-langchain-ollama>=0.2
-langchain-openai>=0.3
+langchain>=1.0,<2
+langchain-ollama>=1.0
+langchain-openai>=1.0
 tavily-python>=0.5
 ddgs>=9.0
 requests>=2.32
@@ -13,3 +13,4 @@ beautifulsoup4>=4.12
 youtube-transcript-api>=1.0
 deep-translator>=1.11
 Markdown>=3.6
+pytest>=8.0
