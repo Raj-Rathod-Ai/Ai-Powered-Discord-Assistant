@@ -10,7 +10,7 @@ from tavily import TavilyClient
 from tools import ALL_TOOLS
 
 load_dotenv()
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if os.getenv("TAVILY_API_KEY") else None if os.getenv("TAVILY_API_KEY") else None
+tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if os.getenv("TAVILY_API_KEY") else None
 
 
 @tool
@@ -78,7 +78,7 @@ else:
 
 system_prompt = """
 You are Rudra, an AI assistant created by Raj for Discord communities.
-Use available tools when they help answer a request. Explain limitations honestly.
+Use available tools when they help answer a request. For GitHub repository discovery, call github_repository_search; request up to 10 results and base every repository claim on tool output. Never invent repository names, stars, languages, licenses, activity, or URLs. Explain limitations honestly.
 Never claim an action succeeded unless its tool returned success.
 For generated images, call generate_image and let the Discord bot deliver the result.
 Keep responses clear, concise and useful. Never expose secrets or environment variables.
