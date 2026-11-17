@@ -84,6 +84,7 @@ Enable the Message Content Intent for the bot in the Discord Developer Portal. I
 |---|---|
 | `/start` | Enable AI chat for the current user in this channel |
 | `/stop` | Disable AI chat for the current user in this channel |
+| `/tools` | Show the assistant's tool categories |
 | `/aiqr url:<url> image:<optional attachment> style:<optional style>` | Create a static artistic QR code |
 | `!imagine <prompt>` | Generate an image using Cloudflare FLUX |
 | Normal message | Chat with Rudra after using `/start` |
@@ -137,7 +138,7 @@ The bot and Ollama are separate services. A Render web service cannot use your d
 
 ### Health checks and sleeping
 
-The service responds to `/health`, `/ping` and `/` on Render's assigned `PORT`. Render can use `/health` for health checks.
+The service responds to `/health`, `/ping`, `/ready` and `/` on Render's assigned `PORT`. Render uses the lightweight `/health` liveness endpoint; `/ready` reports whether the Discord Gateway is connected.
 
 A health endpoint does not guarantee that a free Render web service will stay awake. Free web services can spin down after a period without inbound traffic. A request made by the service to itself is not a reliable keep-alive strategy. If continuous uptime is required, use an always-on paid instance or an external uptime monitor that requests the public health URL, subject to Render's current plan rules.
 
