@@ -368,15 +368,20 @@ def normalize_github_repository_query(query: str) -> str:
 def search_github_repositories(query: str, max_results: int = 10) -> list[dict]:
     """Return normalized public GitHub repositories from the Search API."""
     limit = max(1, min(int(max_results), 10))
+    open_source_requested = bool(re.search(r"\\bopen[ -]?source\\b", query or "", flags=re.IGNORECASE))
     search_query = normalize_github_repository_query(query)
     response = requests.get(
         "https://api.github.com/search/repositories",
-        params={"q": search_query, "per_page": limit, "sort": "stars", "order": "desc"},
+        params={"q": search_query, "per_page": 100 if open_source_requested else limit, "sort": "stars", "order": "desc"},
         headers={"Accept": "application/vnd.github+json"},
         timeout=15,
     )
     response.raise_for_status()
     payload = response.json()
+    raw_items = payload.get("items", [])
+    if open_source_requested:
+        raw_items = [item for item in raw_items if (item.get("license") or {}).get("spdx_id") not in (None, "", "NOASSERTION")]
+    raw_items = raw_items[:limit]
     return [
         {
             "full_name": item.get("full_name", "Unknown"),
@@ -387,7 +392,7 @@ def search_github_repositories(query: str, max_results: int = 10) -> list[dict]:
             "updated_at": item.get("updated_at", "Unknown"),
             "url": item.get("html_url", ""),
         }
-        for item in payload.get("items", [])
+        for item in raw_items
     ]
 
 
