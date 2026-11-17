@@ -35,8 +35,9 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"Not found")
             return
-        body = b'{"status":"ok","service":"rudra-discord-assistant"}'
-        self.send_response(200)
+        ready = client.is_ready()
+        body = b'{"status":"ok","service":"rudra-discord-assistant"}' if ready else b'{"status":"starting","service":"rudra-discord-assistant"}'
+        self.send_response(200 if ready else 503)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
