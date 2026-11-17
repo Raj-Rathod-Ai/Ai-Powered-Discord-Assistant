@@ -35,6 +35,7 @@ def test_github_search_requests_ranked_ten_and_normalizes_fields(monkeypatch):
     result = tools.search_github_repositories("RAG language:Python", 99)
 
     assert captured["url"] == "https://api.github.com/search/repositories"
+    assert captured["params"]["q"] == "RAG language:Python is:public fork:false"
     assert captured["params"]["per_page"] == 10
     assert captured["params"]["sort"] == "stars"
     assert captured["params"]["order"] == "desc"
@@ -81,3 +82,9 @@ def test_github_search_propagates_http_errors(monkeypatch):
     monkeypatch.setattr(tools.requests, "get", lambda *args, **kwargs: BrokenResponse())
     with pytest.raises(tools.requests.HTTPError):
         tools.search_github_repositories("RAG")
+
+
+def test_normalize_natural_language_search_query():
+    assert tools.normalize_github_repository_query(
+        "Find the top 10 open-source RAG projects using Python"
+    ) == "RAG language:Python is:public fork:false"
