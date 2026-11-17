@@ -126,6 +126,12 @@ def youtube_transcript(video_url: str) -> str:
 
 
 def create_art_qr(url, style="original", reference_image=None):
+    """Create a high-contrast, standards-compliant QR code.
+
+    Keep the QR library's native finder/alignment patterns and quiet zone
+    intact. Decorative image overlays are intentionally not applied because
+    they can make otherwise valid QR codes difficult to scan.
+    """
     _safe_url(url)
     styles = {
         "original": ("#111111", "#ffffff"),
@@ -133,58 +139,23 @@ def create_art_qr(url, style="original", reference_image=None):
         "forest": ("#14532d", "#f0fdf4"),
         "sunset": ("#9a3412", "#fff7ed"),
         "violet": ("#5b21b6", "#faf5ff"),
-        "developer": ("#102A43", "#EAF6FF"),
+        "developer": ("#102A43", "#ffffff"),
     }
-    foreground, background = styles.get(style.lower(), styles["original"])
+    foreground, background = styles.get((style or "original").lower(), styles["original"])
+
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=14,
+        box_size=12,
         border=4,
     )
     qr.add_data(url)
     qr.make(fit=True)
-    matrix = qr.get_matrix()
-    size = len(matrix)
-    scale = 14
-    canvas_size = size * scale
-    canvas = Image.new("RGB", (canvas_size, canvas_size), background)
-    if reference_image:
-        texture = ImageOps.fit(reference_image.convert("RGB"), (canvas_size, canvas_size))
-    else:
-        texture = Image.new("RGB", (canvas_size, canvas_size), foreground)
-    draw = ImageDraw.Draw(canvas)
-    for y, row in enumerate(matrix):
-        for x, dark in enumerate(row):
-            if dark:
-                draw.rectangle(
-                    (x * scale, y * scale, (x + 1) * scale - 1, (y + 1) * scale - 1),
-                    fill=foreground if reference_image is None else None,
-                )
-    if reference_image:
-        mask = Image.new("L", (canvas_size, canvas_size), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        for y, row in enumerate(matrix):
-            for x, dark in enumerate(row):
-                if dark:
-                    mask_draw.rectangle(
-                        (x * scale, y * scale, (x + 1) * scale - 1, (y + 1) * scale - 1),
-                        fill=255,
-                    )
-        for top, left in ((0, 0), (0, size - 7), (size - 7, 0)):
-            x0, y0 = left * scale, top * scale
-            mask_draw.rectangle((x0, y0, x0 + 7 * scale, y0 + 7 * scale), fill=0)
-        canvas.paste(texture, (0, 0), mask)
-    finder_color = "#087E8B" if style.lower() == "developer" else foreground
-    for top, left in ((0, 0), (0, size - 7), (size - 7, 0)):
-        x0, y0 = left * scale, top * scale
-        draw.rectangle((x0, y0, x0 + 7 * scale - 1, y0 + 7 * scale - 1), fill=finder_color)
-        draw.rectangle((x0 + scale, y0 + scale, x0 + 6 * scale - 1, y0 + 6 * scale - 1), fill=background)
-        draw.rectangle((x0 + 2 * scale, y0 + 2 * scale, x0 + 5 * scale - 1, y0 + 5 * scale - 1), fill=finder_color)
-    output = Image.new("RGB", (canvas_size + 80, canvas_size + 80), "white")
-    output.paste(canvas, (40, 40))
+
+    # Use the library-rendered matrix without redrawing finder patterns.
+    image = qr.make_image(fill_color=foreground, back_color=background).convert("RGB")
     path = OUTPUT_DIR / f"qr_{uuid.uuid4().hex}.png"
-    output.save(path)
+    image.save(path, format="PNG", optimize=False)
     return str(path)
 
 
