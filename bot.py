@@ -30,14 +30,18 @@ guild_id = os.getenv("DISCORD_GUILD_ID")
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path not in {"/", "/health", "/ping"}:
+        if self.path not in {"/", "/health", "/ping", "/ready"}:
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not found")
             return
         ready = client.is_ready()
-        body = b'{"status":"ok","service":"rudra-discord-assistant"}' if ready else b'{"status":"starting","service":"rudra-discord-assistant"}'
-        self.send_response(200 if ready else 503)
+        if self.path == "/ready":
+            body = b'{"status":"ready"}' if ready else b'{"status":"starting"}'
+            self.send_response(200 if ready else 503)
+        else:
+            body = b'{"status":"ok","service":"rudra-discord-assistant"}'
+            self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -68,11 +72,34 @@ async def send_agent_response(channel, prompt):
                 image_data = base64.b64decode(item.content)
                 await channel.send(file=discord.File(io.BytesIO(image_data), filename="rudra-generated.png"))
             return
+        if getattr(item, "type", "") == "tool" and getattr(item, "name", "") == "generate_qr":
+            if isinstance(item.content, str) and "QR image created:" in item.content:
+                path = Path(item.content.split("QR image created:", 1)[1].strip())
+                if path.is_file():
+                    await channel.send(file=discord.File(path, filename="rudra-qr.png"))
+                    path.unlink(missing_ok=True)
+            return
     answer = response["messages"][-1].content
     if isinstance(answer, list):
         answer = " ".join(part.get("text", "") for part in answer if isinstance(part, dict) and part.get("type") == "text")
     for part in split_message(answer):
         await channel.send(part)
+
+
+@tree.command(name="tools", description="Show Rudra's available AI tools")
+async def tools_command(interaction: discord.Interaction):
+    names = [
+        "Web search and news",
+        "Image generation and artistic QR codes",
+        "Calculator and unit conversion",
+        "Wikipedia, webpage reading and YouTube transcripts",
+        "Translation and summarization",
+        "JSON, Base64, URL and Markdown utilities",
+        "Password, UUID, date and word-count utilities",
+        "Regex, hash and color utilities",
+        "Public GitHub repository search",
+    ]
+    await interaction.response.send_message("\n".join(f"• {name}" for name in names), ephemeral=True)
 
 
 @tree.command(name="start", description="Activate Rudra AI in this channel")
