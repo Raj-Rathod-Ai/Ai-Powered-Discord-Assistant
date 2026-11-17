@@ -86,11 +86,12 @@ Enable the Message Content Intent for the bot in the Discord Developer Portal. I
 | `/start` | Enable AI chat for the current user in this channel |
 | `/stop` | Disable AI chat for the current user in this channel |
 | `/tools` | Show the assistant's tool categories |
+| `/github query:<search> limit:<1–10>` | Search public GitHub repositories and return a formatted embed with stars, language, license, update date and links |
 | `/aiqr url:<url> image:<optional attachment> style:<optional style>` | Create a static artistic QR code |
 | `!imagine <prompt>` | Generate an image using Cloudflare FLUX |
 | Normal message | Chat with Rudra after using `/start` |
 
-The QR styles are original, ocean, forest, sunset and violet. An uploaded image is used as a visual texture inside the QR modules. The QR is static and does not expire by itself. Its destination can still become unavailable. Artistic QR designs can be harder for some scanners to read, so test the generated image with more than one QR scanner before printing or distributing it.
+The `/github` command accepts GitHub search syntax such as `RAG language:Python` or a natural-language request such as `Find the top 10 open-source RAG projects using Python`; results are public repositories, sorted by stars, with license metadata shown where GitHub provides it. A visible public repository is not necessarily open-source if it has no recognized license. The QR styles are original, ocean, forest, sunset and violet. An uploaded image is used as a visual texture inside the QR modules. The QR is static and does not expire by itself. Its destination can still become unavailable. Artistic QR designs can be harder for some scanners to read, so test the generated image with more than one QR scanner before printing or distributing it.
 
 ## Agent tools
 
