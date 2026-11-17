@@ -1,330 +1,158 @@
-# Discord AI Agent
+# Rudra AI Discord Assistant
 
-**An intelligent AI-powered Discord assistant built with Python, LangChain, Ollama, and Qwen 2.5 7B.**
-
-Bring local AI conversations, intelligent agent tools, web search, and AI image generation directly into your Discord server.
-
----
-
-## Overview
-
-Discord AI Agent is a Python-based Discord assistant that connects Discord users with an AI agent powered by a locally hosted Large Language Model (LLM).
-
-It uses Ollama to run Qwen 2.5 7B locally and LangChain to orchestrate AI conversations and tools.
-
-The assistant also supports image generation, web search, and channel-based activation.
+Rudra is a Python Discord assistant built with discord.py, LangChain, Ollama, Qwen and Cloudflare Workers AI. It supports channel-level activation, AI chat, web search, image generation and a collection of practical utility tools.
 
 ## Features
 
-- **AI Chat:** Conversational AI powered by Qwen 2.5 7B.
-- **Local LLM:** Run inference locally using Ollama.
-- **AI Agent:** Tool orchestration using LangChain.
-- **Image Generation:** Generate images from text prompts.
-- **Web Search:** Integrated Tavily and DuckDuckGo search tools.
-- **Time Tool:** Retrieve current date and time.
-- **Discord Integration:** Interact with AI directly from Discord.
-- **Channel-Based Activation:** Activate or deactivate the assistant independently in each channel.
-- **Slash Commands:** Simple `/start` and `/stop` controls.
+- AI conversations powered by a configurable Ollama model
+- Tavily and DuckDuckGo web search
+- Cloudflare FLUX image generation with the `!imagine` command
+- Artistic QR codes with `/aiqr`, using an optional uploaded image as the QR texture
+- Per-user, per-channel activation with `/start` and `/stop`
+- Calculator, Wikipedia, public webpage reader and YouTube transcript retrieval
+- Translation, text summarization and unit conversion
+- JSON formatting, password generation, Base64 and URL encoding
+- Markdown conversion, word counting, UUID and date utilities
+- Regex testing, hash generation and color conversion
+- Public GitHub repository search without a GitHub token
+- News search through the existing Tavily integration
+- HTTP health endpoints at `/`, `/health` and `/ping` for Render monitoring
 
----
+The utility tools do not require new API keys. Some use public services and need an internet connection. Tavily and Cloudflare features continue to use the existing credentials.
 
-# System Architecture
-
-The project follows a modular architecture with separate Discord interaction, agent orchestration, language model, and external tool layers.
-
-## Architecture Diagram
-
-```mermaid
-flowchart TB
-    U[Discord User]
-
-    subgraph Discord["Discord Platform"]
-        C[Discord Text Channel]
-        S["/start and /stop"]
-    end
-
-    subgraph Application["Python Application"]
-        B[bot.py]
-        A[agent.py]
-        M[Message Handler]
-        I[Image Handler]
-    end
-
-    subgraph AI["AI Processing Layer"]
-        L[LangChain Agent]
-        Q[Ollama]
-        QW[Qwen 2.5 7B]
-    end
-
-    subgraph Tools["Agent Tools"]
-        W[Tavily Web Search]
-        D[DuckDuckGo Search]
-        T[Current Time Tool]
-        G[Cloudflare FLUX Image Generation]
-    end
-
-    U --> C
-    U --> S
-    C --> B
-    S --> B
-    B --> M
-    M --> A
-    M --> I
-    A --> L
-    L --> Q
-    Q --> QW
-    L --> W
-    L --> D
-    L --> T
-    L --> G
-    QW --> L
-    L --> A
-    A --> B
-    G --> B
-    B --> C
-    I --> C
-```
-
-## Architecture Components
-
-| Component | Responsibility |
-|---|---|
-| `bot.py` | Discord client, events, commands, message handling |
-| `agent.py` | AI agent, model configuration, tools |
-| LangChain | Agent orchestration and tool execution |
-| Ollama | Local LLM runtime |
-| Qwen 2.5 7B | Language model |
-| Tavily | Web search |
-| DuckDuckGo | Alternative web search |
-| Cloudflare FLUX | Image generation |
-
----
-
-# Message Processing Flow
-
-The following diagram describes how a normal Discord message is processed.
-
-```mermaid
-flowchart TD
-    A[User Sends Message] --> B[Discord on_message Event]
-    B --> C{Is Author a Bot?}
-
-    C -->|Yes| X[Ignore Message]
-    C -->|No| D{Is User Activated?}
-
-    D -->|No| Y[Ignore Message]
-    D -->|Yes| E{Image Command?}
-
-    E -->|Yes| F[Extract Image Prompt]
-    F --> G[Call Image Generation Tool]
-    G --> H[Receive Base64 Image]
-    H --> I[Convert to Image File]
-    I --> J[Send Image to Discord]
-
-    E -->|No| K[Send Message to LangChain Agent]
-    K --> L[Agent Processes Request]
-    L --> M{Tool Required?}
-
-    M -->|Yes| N[Execute Selected Agent Tool]
-    N --> O[Return Tool Result]
-    O --> L
-
-    M -->|No| P[Generate Final AI Response]
-    P --> Q[Send Response to Discord]
-```
-
-## Activation Flow
-
-```mermaid
-flowchart TD
-    A[Discord User] --> B{Slash Command}
-    B -->|/start| C[Add User and Channel to active_users]
-    B -->|/stop| D[Remove User and Channel from active_users]
-    C --> E[AI Assistant Activated]
-    D --> F[AI Assistant Deactivated]
-```
-
----
-
-# Project Structure
+## Project files
 
 ```text
-Discord-AI-Agent/
-│
-├── bot.py
-│   ├── Discord client setup
-│   ├── Slash commands
-│   ├── Message handling
-│   ├── AI chat integration
-│   └── Image generation handling
-│
+.
 ├── agent.py
-│   ├── Ollama model configuration
-│   ├── LangChain agent
-│   ├── Tavily search tool
-│   ├── DuckDuckGo search tool
-│   ├── Current time tool
-│   └── Image generation tool
-│
-├── .env
-│   └── API credentials (not committed)
-│
-├── .gitignore
-│
-├── README.md
-│
-└── requirements.txt
+├── bot.py
+├── tools.py
+├── requirements.txt
+├── render.yaml
+├── .env.example
+└── README.md
 ```
 
----
+## Local setup
 
-# Technology Stack
-
-| Technology | Usage |
-|---|---|
-| Python 3.12 | Application development |
-| Discord.py | Discord API integration |
-| LangChain | AI agent framework |
-| Ollama | Local model runtime |
-| Qwen 2.5 7B | Language model |
-| Tavily | Web search |
-| DuckDuckGo | Search integration |
-| Cloudflare Workers AI | Image generation |
-| FFmpeg | Not required by the text-and-image bot |
-
----
-
-# Installation and Setup
-
-## 1. Clone Repository
+Use Python 3.11 or newer.
 
 ```bash
-git clone https://github.com/Raj-Rathod-Ai/Discord-Ai-Agent.git
-cd Discord-Ai-Agent
+git clone https://github.com/Raj-Rathod-Ai/Ai-Powered-Discord-Assistant.git
+cd Ai-Powered-Discord-Assistant
+python -m venv .venv
 ```
 
-## 2. Install Ollama
-
-Download Ollama:
-
-https://ollama.com/download
-
-Pull the Qwen model:
-
-```bash
-ollama pull qwen2.5:7b
-```
-
-Run Ollama:
-
-```bash
-ollama run qwen2.5:7b
-```
-
-## 3. Install Dependencies
-
-Using uv:
-
-```bash
-uv sync
-```
-
-Alternatively, install the dependencies declared in your requirements file:
+Activate the environment, then install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 4. Environment Configuration
+Install and run Ollama, then pull the configured model:
 
-Create a `.env` file:
+```bash
+ollama pull qwen2.5:7b
+ollama serve
+```
+
+Copy `.env.example` to `.env` and fill in the values:
 
 ```env
 DISCORD_API_KEY=your_discord_bot_token
-TAVILY_API_KEY=your_tavily_api_key
+TAVILY_API_KEY=your_existing_tavily_key
 CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
 CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+CLOUDFLARE_MODEL=@cf/black-forest-labs/flux-1-schnell
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
+DISCORD_GUILD_ID=your_test_server_id
+PORT=10000
 ```
 
-Add any other credentials required by your actual `agent.py` configuration.
-
-**Never upload `.env` to GitHub.**
-
-## 5. Run the Discord Bot
+Start the bot:
 
 ```bash
-uv run bot.py
+python bot.py
 ```
 
----
+Enable the Message Content Intent for the bot in the Discord Developer Portal. Invite it with bot and applications.commands scopes and the permissions needed to read and send messages, use slash commands and attach files.
 
-# Discord Commands
+## Discord commands
 
 | Command | Description |
 |---|---|
-| `/start` | Activate the AI assistant in the current channel |
-| `/stop` | Deactivate the AI assistant in the current channel |
-| `!imagine <prompt>` | Generate an AI image |
-| Normal message | Chat with the AI assistant |
+| `/start` | Enable AI chat for the current user in this channel |
+| `/stop` | Disable AI chat for the current user in this channel |
+| `/aiqr url:<url> image:<optional attachment> style:<optional style>` | Create a static artistic QR code |
+| `!imagine <prompt>` | Generate an image using Cloudflare FLUX |
+| Normal message | Chat with Rudra after using `/start` |
 
----
+The QR styles are original, ocean, forest, sunset and violet. An uploaded image is used as a visual texture inside the QR modules. The QR is static and does not expire by itself. Its destination can still become unavailable. Artistic QR designs can be harder for some scanners to read, so test the generated image with more than one QR scanner before printing or distributing it.
 
-# Deployment Architecture
+## Agent tools
 
-The application can run locally or use a hybrid cloud architecture.
+The LangChain agent can call the following utilities:
 
-### Local Deployment
+- `calculator`
+- `wikipedia_search`
+- `read_url`
+- `youtube_transcript`
+- `generate_qr`
+- `translate_text`
+- `summarize_text`
+- `unit_converter`
+- `format_json`
+- `password_generator`
+- `base64_tool`
+- `url_codec`
+- `markdown_to_html`
+- `word_counter`
+- `uuid_generator`
+- `date_calculator`
+- `regex_tester`
+- `hash_generator`
+- `color_converter`
+- `github_repository_search`
+- `latest_news`
 
-```mermaid
-flowchart TB
-    D[Discord] <--> B[Windows PC: Discord Bot]
-    B <--> A[LangChain Agent]
-    A <--> O[Local Ollama]
-    O <--> Q[Qwen 2.5 7B]
-```
+The webpage reader blocks localhost and literal private IP addresses and does not follow redirects. Only use it with public pages you trust.
 
-### Hybrid Cloud Deployment
+## Render deployment
 
-```mermaid
-flowchart TB
-    D[Discord] <--> R[Render: Discord Bot]
-    R <--> C[Secure Cloudflare Tunnel]
-    C <--> W[Windows PC]
-    W <--> O[Ollama]
-    O <--> Q[Qwen 2.5 7B]
-```
+The repository includes a `render.yaml` Blueprint for a web service. In Render, create a new Blueprint deployment from this repository and add the environment values requested by the Blueprint.
 
-In hybrid deployment, the Discord bot runs on Render while Ollama remains on your own computer. The computer must stay powered on and connected to the internet.
+Required environment variables:
 
----
+- `DISCORD_API_KEY`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+- `OLLAMA_BASE_URL`
 
-# Security
+`TAVILY_API_KEY` enables web and news search. `DISCORD_GUILD_ID` is optional; when set, slash commands are synced to that server for faster development updates. Leave it empty to sync globally.
 
-- Never commit Discord bot tokens.
-- Never publish API credentials.
-- Keep `.env` excluded from Git.
-- Do not expose the Ollama API directly to the public internet.
-- Use authenticated, encrypted connections for remote model access.
+### Ollama on Render
 
----
+The bot and Ollama are separate services. A Render web service cannot use your development computer's `localhost`. Run Ollama on a machine or host that remains online, expose it only through a secure authenticated tunnel or private network, and set `OLLAMA_BASE_URL` to that reachable endpoint. Do not expose the Ollama port publicly without authentication.
 
-# Future Improvements
+### Health checks and sleeping
 
-- Persistent conversation memory.
-- Multi-server configuration.
-- User-specific conversation context.
-- More AI tools and integrations.
-- Secure cloud deployment.
-- Improved agent observability.
-- Streaming AI responses.
-- Persistent activation settings.
+The service responds to `/health`, `/ping` and `/` on Render's assigned `PORT`. Render can use `/health` for health checks.
 
----
+A health endpoint does not guarantee that a free Render web service will stay awake. Free web services can spin down after a period without inbound traffic. A request made by the service to itself is not a reliable keep-alive strategy. If continuous uptime is required, use an always-on paid instance or an external uptime monitor that requests the public health URL, subject to Render's current plan rules.
 
-# Author
+### Deployment type
 
-**Raj Rathod**
+This project runs a Discord Gateway connection and an HTTP health server in the same process. Use the included web service configuration if you need the health URL. For a dedicated Discord process without a public HTTP endpoint, a Render background worker is a better fit, but it will not provide the public health URL.
 
-GitHub: [@Raj-Rathod-Ai](https://github.com/Raj-Rathod-Ai)
+## Security and operational notes
 
-Project: [Discord-Ai-Agent](https://github.com/Raj-Rathod-Ai/Discord-Ai-Agent)
+- Never commit `.env` or paste API tokens into source code.
+- Rotate any token that has been exposed in a screenshot, log or commit.
+- Set Discord permissions to the minimum required.
+- Use a persistent database before relying on activation state across restarts; current `/start` and `/stop` state is held in process memory.
+- Keep the bot and its dependencies updated.
+
+## License
+
+Add a license file if you intend to publish reuse permissions for this project.
