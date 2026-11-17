@@ -377,12 +377,12 @@ def github_repository_search(query: str, max_results: int = 10) -> str:
         rows = []
         for index, item in enumerate(items, 1):
             rows.append(
-                f"{index}. {item['full_name']}\\n"
-                f"Description: {item['description']}\\n"
-                f"Stars: {item['stars']} | Language: {item['language']} | License: {item['license']}\\n"
-                f"Updated: {item['updated_at']}\\nURL: {item['url']}"
+                f"{index}. {item['full_name']}\n"
+                f"Description: {item['description']}\n"
+                f"Stars: {item['stars']} | Language: {item['language']} | License: {item['license']}\n"
+                f"Updated: {item['updated_at']}\nURL: {item['url']}"
             )
-        return "\\n\\n".join(rows)
+        return "\n\n".join(rows)
     except requests.RequestException as exc:
         return f"GitHub API request failed: {type(exc).__name__}: {exc}"
     except (ValueError, TypeError, KeyError) as exc:
