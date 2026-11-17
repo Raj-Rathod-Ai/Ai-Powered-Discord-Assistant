@@ -16,5 +16,5 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m compileall -q bot.py agent.py tools.py
+      - run: python -m compileall -q bot.py agent.py tools.py channel_policy.py evals/run_eval.py
       - run: pytest -q
