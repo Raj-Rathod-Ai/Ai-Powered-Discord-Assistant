@@ -111,7 +111,7 @@ def start_health_server():
 
 
 IMAGE_REQUEST_PATTERN = re.compile(
-    r"\\b(?:create|generate|draw|make|design)\\b.{0,100}\\b(?:image|picture|illustration|artwork)\\b",
+    r"(?:\b(?:create|generate|draw|make|design|illustrate|paint|render)\b.{0,120}\b(?:image|picture|illustration|artwork|photo|poster|wallpaper|avatar)\b|\b(?:draw|illustrate|paint|render)\b|\b(?:image|picture|illustration|artwork|photo)\s+(?:of|showing|depicting)\b)",
     re.IGNORECASE | re.DOTALL,
 )
 
