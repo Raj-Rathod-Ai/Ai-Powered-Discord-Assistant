@@ -1,4 +1,6 @@
 import datetime
+import json
+import logging
 import os
 import requests
 from ddgs import DDGS
@@ -10,7 +12,56 @@ from tavily import TavilyClient
 from tools import ALL_TOOLS
 
 load_dotenv()
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if os.getenv("TAVILY_API_KEY") else None if os.getenv("TAVILY_API_KEY") else None
+logger = logging.getLogger("rudra.agent")
+tavily_key = os.getenv("TAVILY_API_KEY")
+tavily_client = TavilyClient(api_key=tavily_key) if tavily_key else None
+
+
+def _cloudflare_response_detail(response) -> str:
+    """Extract a bounded description from a Cloudflare response body."""
+    if response is None:
+        return "No HTTP response was attached."
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            errors = payload.get("errors")
+            if isinstance(errors, list) and errors:
+                messages = [
+                    str(item.get("message") or item.get("code") or item)
+                    if isinstance(item, dict) else str(item)
+                    for item in errors
+                ]
+                return "; ".join(messages)[:1200]
+            error = payload.get("error") or payload.get("message")
+            if error:
+                if isinstance(error, dict):
+                    error = error.get("message") or json.dumps(error, ensure_ascii=False)
+                return str(error)[:1200]
+            return json.dumps(payload, ensure_ascii=False)[:1200]
+        return str(payload)[:1200]
+    except (ValueError, TypeError):
+        return str(getattr(response, "text", "No response body"))[:1200]
+
+
+def log_model_error(exc: Exception) -> None:
+    """Log provider response details without logging request headers or API tokens."""
+    response = getattr(exc, "response", None)
+    status = getattr(exc, "status_code", None) or getattr(response, "status_code", None)
+    body = getattr(exc, "body", None)
+    if body is None and response is not None:
+        detail = _cloudflare_response_detail(response)
+    elif isinstance(body, (dict, list)):
+        detail = json.dumps(body, ensure_ascii=False)[:1200]
+    elif body is not None:
+        detail = str(body)[:1200]
+    else:
+        detail = str(exc)[:1200]
+    logger.error(
+        "Chat model request failed (provider=Cloudflare Workers AI, model=%s, status=%s): %s",
+        os.getenv("CLOUDFLARE_MODEL", "@cf/qwen/qwen3.8-27b"),
+        status or "unknown",
+        detail,
+    )
 
 
 @tool
@@ -22,12 +73,27 @@ def generate_image(prompt: str) -> str:
     if not account_id or not token:
         raise RuntimeError("Cloudflare account credentials are not configured.")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model_name}"
-    response = requests.post(url, headers={"Authorization": f"Bearer {token}"}, json={"prompt": prompt}, timeout=120)
-    response.raise_for_status()
-    data = response.json()
-    if not data.get("success") or not data.get("result", {}).get("image"):
-        raise RuntimeError(str(data.get("errors", "Image generation returned no image.")))
-    return data["result"]["image"]
+    response = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        json={"prompt": prompt},
+        timeout=(15, 180),
+    )
+    if not response.ok:
+        raise RuntimeError(
+            f"Cloudflare image API returned HTTP {response.status_code}: "
+            f"{_cloudflare_response_detail(response)}"
+        )
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("Cloudflare image API returned a non-JSON response.") from exc
+    image_data = (data.get("result") or {}).get("image")
+    if not data.get("success") or not image_data:
+        raise RuntimeError(
+            f"Cloudflare image generation failed: {_cloudflare_response_detail(response)}"
+        )
+    return image_data
 
 
 @tool
@@ -54,9 +120,14 @@ def ddg_search(query: str) -> str:
 
 cloudflare_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 cloudflare_token = os.getenv("CLOUDFLARE_API_TOKEN")
-cloudflare_model = os.getenv("CLOUDFLARE_MODEL")
+cloudflare_model = os.getenv("CLOUDFLARE_MODEL", "@cf/qwen/qwen3.8-27b").strip()
 
-if cloudflare_account and cloudflare_token and cloudflare_model:
+if bool(cloudflare_account) != bool(cloudflare_token):
+    raise RuntimeError(
+        "Set both CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN, or configure OLLAMA_BASE_URL."
+    )
+
+if cloudflare_account and cloudflare_token:
     from langchain_openai import ChatOpenAI
 
     model = ChatOpenAI(
@@ -64,7 +135,10 @@ if cloudflare_account and cloudflare_token and cloudflare_model:
         api_key=cloudflare_token,
         base_url=f"https://api.cloudflare.com/client/v4/accounts/{cloudflare_account}/ai/v1",
         temperature=0.5,
-        max_tokens=512,
+        model_kwargs={"max_completion_tokens": 512},
+        timeout=90,
+        max_retries=2,
+        use_responses_api=False,
     )
 else:
     model = ChatOllama(
