@@ -33,9 +33,10 @@ Optional:
 - Render checks `/health`, which remains HTTP 200 while the process is alive, including during Discord Gateway reconnection.
 - `/ready` reports Discord connectivity and slash-command sync state. It returns 503 until Discord is connected.
 - discord.py is configured to reconnect automatically and connection drops/resumes are logged.
-- The Blueprint uses an always-on paid Render service. Free services may spin down while idle and should not be used for an always-available Discord Gateway bot.
-- A persistent disk mounted at `/var/data` stores `/start` and `/stop` activation state across restarts and deploys.
-- An app-to-itself ping is not used: it is not a reliable way to prevent Render from suspending a free service.
+- The Blueprint stays on Render's **free** plan and pins deployment to `main`. Free instances can still be restarted by Render and have no uptime guarantee.
+- Render's current free-tier behavior counts incoming HTTP requests and inbound WebSocket messages as activity. An established Discord Gateway connection receives WebSocket messages; keep an eye on `/ready` to confirm that connection is actually alive.
+- For an extra wake-up signal, configure your external uptime monitor to use **GET** `https://<your-service>.onrender.com/health` about every 5 minutes. Do not use `HEAD /` on the old build; that returned 501. The app does not ping itself.
+- Activation state is written to the local filesystem, but Render's free filesystem is ephemeral. If preserving `/start` state across restarts is required, configure a paid persistent disk and set `DATA_DIR` to its mount path.
 
 ### Deployment checklist
 
