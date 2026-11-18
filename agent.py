@@ -72,6 +72,11 @@ def generate_image(prompt: str) -> str:
     model_name = os.getenv("CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-1-schnell")
     if not account_id or not token:
         raise RuntimeError("Cloudflare account credentials are not configured.")
+    prompt = (prompt or "").strip()
+    if not prompt:
+        raise ValueError("Image prompt cannot be empty.")
+    if len(prompt) > 2048:
+        raise ValueError("FLUX prompts must be 2048 characters or fewer.")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model_name}"
     response = requests.post(
         url,
