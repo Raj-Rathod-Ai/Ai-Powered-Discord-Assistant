@@ -62,31 +62,44 @@ def save_active_users():
 
 
 class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path not in {"/", "/health", "/ping", "/ready"}:
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Not found")
-            return
-        ready = client.is_ready()
-        if self.path == "/ready":
+    def _respond(self, include_body=True):
+        path = self.path.partition("?")[0]
+        if path not in {"/", "/health", "/ping", "/ready"}:
+            status, body = 404, b'{"status":"not_found"}'
+        elif path == "/ready":
+            ready = client.is_ready()
             body = json.dumps({
                 "status": "ready" if ready else "disconnected",
                 "discord_connected": ready,
                 "commands_synced": commands_synced,
             }).encode("utf-8")
-            self.send_response(200 if ready else 503)
+            status = 200 if ready and commands_synced else 503
         else:
             # Liveness is independent of Discord Gateway reconnects.
+            status = 200
             body = b'{"status":"ok","service":"rudra-discord-assistant"}'
-            self.send_response(200)
+
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        if include_body:
+            self.wfile.write(body)
+
+    def do_GET(self):
+        self._respond(include_body=True)
+
+    def do_HEAD(self):
+        # Uptime monitors commonly use HEAD. Return the same status and headers
+        # as GET but do not send a response body.
+        self._respond(include_body=False)
 
     def log_message(self, format, *args):
-        logger.info("health endpoint %s", format % args)
+        message = format % args
+        # Render polls /health every few seconds; keep routine 200s out of logs.
+        if ' 200 ' not in message:
+            logger.info("health endpoint %s", message)
 
 
 def start_health_server():
@@ -186,22 +199,31 @@ async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attach
         await interaction.followup.send(f"Could not generate the QR code: {exc}", ephemeral=True)
 
 
+async def sync_application_commands():
+    global commands_synced
+    for attempt in range(1, 6):
+        try:
+            async with command_sync_lock:
+                if guild_id:
+                    guild = discord.Object(id=int(guild_id))
+                    tree.copy_global_to(guild=guild)
+                    synced = await tree.sync(guild=guild)
+                else:
+                    synced = await tree.sync()
+                commands_synced = True
+            logger.info("Synced %s application commands (attempt %s)", len(synced), attempt)
+            return
+        except Exception:
+            commands_synced = False
+            logger.exception("Application-command sync failed (attempt %s/5)", attempt)
+            if attempt < 5:
+                await asyncio.sleep(min(60, attempt * 5))
+
+
 @client.event
 async def on_ready():
-    global commands_synced
-    try:
-        async with command_sync_lock:
-            if guild_id:
-                guild = discord.Object(id=int(guild_id))
-                tree.copy_global_to(guild=guild)
-                synced = await tree.sync(guild=guild)
-            else:
-                synced = await tree.sync()
-            commands_synced = True
-        logger.info("Logged in as %s; synced %s commands", client.user, len(synced))
-    except Exception:
-        commands_synced = False
-        logger.exception("Slash command sync failed; Discord is connected but commands may be stale")
+    logger.info("Discord Gateway ready as %s", client.user)
+    await sync_application_commands()
 
 
 @client.event
