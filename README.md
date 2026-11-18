@@ -6,7 +6,7 @@ Rudra is a Python Discord assistant built with discord.py, LangChain, Ollama, Qw
 
 - AI chat using Cloudflare Workers AI or an external Ollama endpoint
 - Tavily and DuckDuckGo web search
-- Cloudflare FLUX image generation with `!imagine`
+- Cloudflare FLUX image generation with natural-language image requests, `/imagine`, or `!imagine`
 - Artistic QR codes with `/aiqr`
 - Per-user, per-channel activation with `/start` and `/stop`
 - Utility tools for calculations, translation, summarization, encoding, hashing, dates, regex, GitHub search and more
@@ -21,7 +21,7 @@ The Render Blueprint deploys **only from `main`**. It runs the Discord Gateway c
 - `DISCORD_API_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_MODEL`
+- `CLOUDFLARE_MODEL` defaults to `@cf/qwen/qwen3.8-27b`, which supports function calling.
 
 Optional:
 - `TAVILY_API_KEY` for search/news
@@ -69,7 +69,7 @@ ollama serve
 python bot.py
 ```
 
-Set `PORT=10000` for local health checks.
+Set `PORT=10000` for local health checks. After activating a channel with `/start`, generate images with `/imagine prompt:<description>`, `!imagine <description>`, or a normal message such as `Create an image of ...`.
 
 ## Security
 
