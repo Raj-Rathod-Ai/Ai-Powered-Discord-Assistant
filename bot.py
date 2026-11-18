@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from langchain.messages import HumanMessage
 from PIL import Image
 
-from agent import agent, generate_image
+from agent import agent, generate_image, log_model_error
 from tools import create_art_qr
 
 load_dotenv()
@@ -110,6 +110,27 @@ def start_health_server():
     return server
 
 
+IMAGE_REQUEST_PATTERN = re.compile(
+    r"\\b(?:create|generate|draw|make|design)\\b.{0,100}\\b(?:image|picture|illustration|artwork)\\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def is_image_request(content):
+    """Recognize common natural-language image requests."""
+    return bool(IMAGE_REQUEST_PATTERN.search(content or ""))
+
+
+async def generate_and_send_image(channel, prompt):
+    image_data = await asyncio.to_thread(generate_image.invoke, {"prompt": prompt})
+    if not isinstance(image_data, str):
+        raise RuntimeError("Image provider returned an unexpected response.")
+    image_bytes = base64.b64decode(image_data, validate=True)
+    await channel.send(
+        file=discord.File(io.BytesIO(image_bytes), filename="rudra-generated.png")
+    )
+
+
 def split_message(value, limit=1900):
     text = str(value)
     return [text[index:index + limit] for index in range(0, len(text), limit)] or [""]
@@ -166,6 +187,26 @@ async def stop(interaction: discord.Interaction):
     active_users.discard((interaction.user.id, interaction.channel_id))
     save_active_users()
     await interaction.response.send_message("Rudra has been deactivated for you in this channel.", ephemeral=True)
+
+
+@tree.command(name="imagine", description="Generate an image with Cloudflare FLUX")
+@app_commands.describe(prompt="Describe the image you want to generate")
+async def imagine(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer(thinking=True)
+    try:
+        image_data = await asyncio.to_thread(generate_image.invoke, {"prompt": prompt})
+        if not isinstance(image_data, str):
+            raise RuntimeError("Image provider returned an unexpected response.")
+        image_bytes = base64.b64decode(image_data, validate=True)
+        await interaction.followup.send(
+            content="Here is your generated image.",
+            file=discord.File(io.BytesIO(image_bytes), filename="rudra-generated.png"),
+        )
+    except Exception:
+        logger.exception("Slash image generation failed")
+        await interaction.followup.send(
+            "Image generation failed. Check Cloudflare image-model configuration and Render logs."
+        )
 
 
 @tree.command(name="aiqr", description="Create an artistic QR code from a URL and optional image")
@@ -243,6 +284,32 @@ async def on_message(message):
     if (message.author.id, message.channel.id) not in active_users:
         return
     content = message.content.strip()
+    if content.lower().startswith("!imagine "):
+        prompt = content[len("!imagine "):].strip()
+        if not prompt:
+            await message.channel.send("Add a prompt after !imagine.")
+            return
+        try:
+            async with message.channel.typing():
+                await generate_and_send_image(message.channel, prompt)
+        except Exception:
+            logger.exception("Image generation failed")
+            await message.channel.send(
+                "Image generation failed. Check Cloudflare image-model configuration and Render logs."
+            )
+        return
+
+    if is_image_request(content):
+        try:
+            async with message.channel.typing():
+                await generate_and_send_image(message.channel, content)
+        except Exception:
+            logger.exception("Natural-language image generation failed")
+            await message.channel.send(
+                "Image generation failed. Check Cloudflare image-model configuration and Render logs."
+            )
+        return
+
     if "qr" in content.lower():
         url_match = re.search(r"https?://[^\s<>]+", content)
         if url_match:
@@ -261,24 +328,14 @@ async def on_message(message):
             return
     if not content and not message.attachments:
         return
-    if content.lower().startswith("!imagine "):
-        prompt = content[len("!imagine "):].strip()
-        if not prompt:
-            await message.channel.send("Add a prompt after !imagine.")
-            return
-        try:
-            async with message.channel.typing():
-                image_data = await asyncio.to_thread(generate_image.invoke, {"prompt": prompt})
-            await message.channel.send(file=discord.File(io.BytesIO(base64.b64decode(image_data)), filename="generated.png"))
-        except Exception:
-            logger.exception("Image generation failed")
-            await message.channel.send("Image generation failed. Check the bot logs and Cloudflare configuration.")
-        return
     try:
         await send_agent_response(message.channel, content)
-    except Exception:
+    except Exception as exc:
         logger.exception("Agent request failed")
-        await message.channel.send("I couldn't complete that request. Please try again shortly.")
+        log_model_error(exc)
+        await message.channel.send(
+            "I couldn't complete that request. Check the Render logs for the AI provider's error details."
+        )
 
 
 async def main():
