@@ -31,7 +31,7 @@ Optional:
 ### Health checks and uptime
 
 - Render checks `/health`, which remains HTTP 200 while the process is alive, including during Discord Gateway reconnection.
-- `/ready` reports Discord connectivity and slash-command sync state. It returns 503 until Discord is connected.
+- `/ready` reports Discord connectivity and slash-command sync state. It returns 503 until both the Discord Gateway is connected and application-command sync succeeds.
 - discord.py is configured to reconnect automatically and connection drops/resumes are logged.
 - The Blueprint stays on Render's **free** plan and pins deployment to `main`. Free instances can still be restarted by Render and have no uptime guarantee.
 - Render's current free-tier behavior counts incoming HTTP requests and inbound WebSocket messages as activity. An established Discord Gateway connection receives WebSocket messages; keep an eye on `/ready` to confirm that connection is actually alive.
