@@ -66,5 +66,5 @@ def test_generate_image_rejects_invalid_prompt_before_api_call(monkeypatch, prom
 
     monkeypatch.setattr(agent.requests, "post", should_not_be_called)
 
-    with pytest.raises((ValueError, Exception)):
+    with pytest.raises(ValueError):
         agent.generate_image.invoke({"prompt": prompt})
