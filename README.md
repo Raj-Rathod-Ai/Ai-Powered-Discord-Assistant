@@ -52,7 +52,7 @@ Enable Message Content Intent in the Discord Developer Portal. Invite the bot us
 
 ## Local development
 
-Use Python 3.11 or newer:
+Use Python 3.14.10 (the Render runtime used for deployment), or newer:
 
 ```bash
 git clone https://github.com/Raj-Rathod-Ai/Ai-Powered-Discord-Assistant.git
