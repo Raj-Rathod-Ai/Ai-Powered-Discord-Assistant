@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import json
 import logging
 import os
 import re
@@ -25,8 +26,39 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
-active_users = set()
 guild_id = os.getenv("DISCORD_GUILD_ID")
+command_sync_lock = asyncio.Lock()
+commands_synced = False
+
+# Activation state survives deploys when DATA_DIR is backed by a Render disk.
+DATA_DIR = Path(os.getenv("DATA_DIR", "/var/data"))
+if not DATA_DIR.exists() or not os.access(DATA_DIR, os.W_OK):
+    DATA_DIR = Path(os.getenv("LOCAL_DATA_DIR", "."))
+ACTIVATION_FILE = DATA_DIR / "active_channels.json"
+
+
+def load_active_users():
+    try:
+        stored = json.loads(ACTIVATION_FILE.read_text(encoding="utf-8"))
+        return {(int(user_id), int(channel_id)) for user_id, channel_id in stored}
+    except FileNotFoundError:
+        return set()
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        logger.exception("Could not load activation state from %s", ACTIVATION_FILE)
+        return set()
+
+
+active_users = load_active_users()
+
+
+def save_active_users():
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        temporary = ACTIVATION_FILE.with_suffix(".tmp")
+        temporary.write_text(json.dumps(sorted([list(item) for item in active_users])), encoding="utf-8")
+        temporary.replace(ACTIVATION_FILE)
+    except OSError:
+        logger.exception("Could not persist activation state; configure a Render disk mounted at %s", DATA_DIR)
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -38,9 +70,14 @@ class HealthHandler(BaseHTTPRequestHandler):
             return
         ready = client.is_ready()
         if self.path == "/ready":
-            body = b'{"status":"ready"}' if ready else b'{"status":"starting"}'
+            body = json.dumps({
+                "status": "ready" if ready else "disconnected",
+                "discord_connected": ready,
+                "commands_synced": commands_synced,
+            }).encode("utf-8")
             self.send_response(200 if ready else 503)
         else:
+            # Liveness is independent of Discord Gateway reconnects.
             body = b'{"status":"ok","service":"rudra-discord-assistant"}'
             self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -55,8 +92,9 @@ class HealthHandler(BaseHTTPRequestHandler):
 def start_health_server():
     port = int(os.getenv("PORT", "10000"))
     server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    logger.info("Health endpoint listening on port %s", port)
+    threading.Thread(target=server.serve_forever, name="health-server", daemon=True).start()
+    logger.info("Health endpoint listening on 0.0.0.0:%s", port)
+    return server
 
 
 def split_message(value, limit=1900):
@@ -106,12 +144,14 @@ async def tools_command(interaction: discord.Interaction):
 @tree.command(name="start", description="Activate Rudra AI in this channel")
 async def start(interaction: discord.Interaction):
     active_users.add((interaction.user.id, interaction.channel_id))
+    save_active_users()
     await interaction.response.send_message("Rudra is active in this channel for you.", ephemeral=True)
 
 
 @tree.command(name="stop", description="Deactivate Rudra AI in this channel")
 async def stop(interaction: discord.Interaction):
     active_users.discard((interaction.user.id, interaction.channel_id))
+    save_active_users()
     await interaction.response.send_message("Rudra has been deactivated for you in this channel.", ephemeral=True)
 
 
@@ -148,16 +188,30 @@ async def aiqr(interaction: discord.Interaction, url: str, image: discord.Attach
 
 @client.event
 async def on_ready():
+    global commands_synced
     try:
-        if guild_id:
-            guild = discord.Object(id=int(guild_id))
-            tree.copy_global_to(guild=guild)
-            synced = await tree.sync(guild=guild)
-        else:
-            synced = await tree.sync()
+        async with command_sync_lock:
+            if guild_id:
+                guild = discord.Object(id=int(guild_id))
+                tree.copy_global_to(guild=guild)
+                synced = await tree.sync(guild=guild)
+            else:
+                synced = await tree.sync()
+            commands_synced = True
         logger.info("Logged in as %s; synced %s commands", client.user, len(synced))
     except Exception:
-        logger.exception("Slash command sync failed")
+        commands_synced = False
+        logger.exception("Slash command sync failed; Discord is connected but commands may be stale")
+
+
+@client.event
+async def on_resumed():
+    logger.info("Discord Gateway session resumed")
+
+
+@client.event
+async def on_disconnect():
+    logger.warning("Discord Gateway disconnected; discord.py will attempt to reconnect")
 
 
 @client.event
@@ -167,8 +221,6 @@ async def on_message(message):
     if (message.author.id, message.channel.id) not in active_users:
         return
     content = message.content.strip()
-    # Handle explicit QR requests deterministically so the image is always attached,
-    # rather than relying on the language model to invoke and relay a file tool.
     if "qr" in content.lower():
         url_match = re.search(r"https?://[^\s<>]+", content)
         if url_match:
@@ -213,7 +265,7 @@ async def main():
         raise RuntimeError("DISCORD_API_KEY is required.")
     start_health_server()
     async with client:
-        await client.start(token)
+        await client.start(token, reconnect=True)
 
 
 if __name__ == "__main__":
